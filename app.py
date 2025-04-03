@@ -13,6 +13,10 @@ import concurrent.futures
 import atexit
 import os
 import subprocess
+import requests
+from bs4 import BeautifulSoup
+import time
+import json
 
 app = Flask(__name__)
 
@@ -34,34 +38,6 @@ atexit.register(cleanup)
 def create_driver():
     print("Starting Chrome driver creation...")
 
-    # Find Chrome binary
-    chrome_binary = None
-    possible_paths = [
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/google-chrome",
-        "/usr/local/bin/google-chrome",
-        "/opt/google/chrome/google-chrome"
-    ]
-
-    # Check if Chrome exists in any of the possible paths
-    for path in possible_paths:
-        if os.path.exists(path):
-            chrome_binary = path
-            print(f"Found Chrome binary at: {chrome_binary}")
-            break
-
-    if not chrome_binary:
-        print("Chrome binary not found in standard locations. Trying to find it...")
-        try:
-            # Try to find Chrome using 'which' command
-            import subprocess
-            result = subprocess.run(['which', 'google-chrome-stable'], capture_output=True, text=True)
-            if result.stdout.strip():
-                chrome_binary = result.stdout.strip()
-                print(f"Found Chrome using 'which' command at: {chrome_binary}")
-        except Exception as e:
-            print(f"Error finding Chrome with 'which' command: {str(e)}")
-
     # Set up Chrome options
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
@@ -72,63 +48,105 @@ def create_driver():
     options.add_argument("--log-level=3")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
-    # If Chrome binary was found, set it explicitly
-    if chrome_binary:
-        print(f"Setting Chrome binary location to: {chrome_binary}")
-        options.binary_location = chrome_binary
-
-    # Find ChromeDriver
+    # Try to read Chrome and ChromeDriver paths from the file created by build.sh
+    chrome_path = None
     chromedriver_path = None
-    possible_driver_paths = [
-        "/usr/local/bin/chromedriver",
-        "/usr/bin/chromedriver"
-    ]
 
-    for path in possible_driver_paths:
-        if os.path.exists(path):
-            chromedriver_path = path
-            print(f"Found ChromeDriver at: {chromedriver_path}")
-            break
+    try:
+        if os.path.exists('/etc/chrome-paths'):
+            print("Reading Chrome paths from /etc/chrome-paths")
+            with open('/etc/chrome-paths', 'r') as f:
+                for line in f:
+                    if line.startswith('CHROME_PATH='):
+                        chrome_path = line.strip().split('=')[1]
+                    elif line.startswith('CHROMEDRIVER_PATH='):
+                        chromedriver_path = line.strip().split('=')[1]
 
-    # Try different methods to create the driver
+            print(f"Found Chrome path: {chrome_path}")
+            print(f"Found ChromeDriver path: {chromedriver_path}")
+    except Exception as e:
+        print(f"Error reading Chrome paths file: {str(e)}")
+
+    # If we couldn't read from the file, try standard locations
+    if not chrome_path:
+        possible_chrome_paths = [
+            "/opt/chrome/chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/google-chrome",
+            "/usr/local/bin/google-chrome",
+            "/opt/google/chrome/google-chrome"
+        ]
+
+        for path in possible_chrome_paths:
+            if os.path.exists(path):
+                chrome_path = path
+                print(f"Found Chrome binary at: {chrome_path}")
+                break
+
+    if not chromedriver_path:
+        possible_driver_paths = [
+            "/opt/chromedriver/chromedriver",
+            "/usr/local/bin/chromedriver",
+            "/usr/bin/chromedriver"
+        ]
+
+        for path in possible_driver_paths:
+            if os.path.exists(path):
+                chromedriver_path = path
+                print(f"Found ChromeDriver at: {chromedriver_path}")
+                break
+
+    # If we still don't have Chrome, try using 'which'
+    if not chrome_path:
+        try:
+            result = subprocess.run(['which', 'google-chrome-stable'], capture_output=True, text=True)
+            if result.stdout.strip():
+                chrome_path = result.stdout.strip()
+                print(f"Found Chrome using 'which' command at: {chrome_path}")
+        except Exception as e:
+            print(f"Error finding Chrome with 'which' command: {str(e)}")
+
+    # If we still don't have ChromeDriver, try using 'which'
+    if not chromedriver_path:
+        try:
+            result = subprocess.run(['which', 'chromedriver'], capture_output=True, text=True)
+            if result.stdout.strip():
+                chromedriver_path = result.stdout.strip()
+                print(f"Found ChromeDriver using 'which' command at: {chromedriver_path}")
+        except Exception as e:
+            print(f"Error finding ChromeDriver with 'which' command: {str(e)}")
+
+    # Set Chrome binary location if found
+    if chrome_path:
+        print(f"Setting Chrome binary location to: {chrome_path}")
+        options.binary_location = chrome_path
+
+    # Create the driver
     try:
         if chromedriver_path:
-            # Use the found ChromeDriver
             print(f"Creating Chrome driver with explicit ChromeDriver path: {chromedriver_path}")
             service = Service(executable_path=chromedriver_path)
             driver = webdriver.Chrome(service=service, options=options)
             print("Successfully created Chrome driver with explicit ChromeDriver path")
+            return driver
         else:
-            # Try with ChromeDriverManager
-            print("Creating Chrome driver with ChromeDriverManager")
+            print("No ChromeDriver path found, trying with ChromeDriverManager")
             service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=options)
             print("Successfully created Chrome driver with ChromeDriverManager")
-
-        return driver
+            return driver
     except Exception as e:
-        print(f"Error creating Chrome driver with primary method: {str(e)}")
+        print(f"Error creating Chrome driver: {str(e)}")
 
-        # Fallback methods
+        # Try one more time with direct instantiation
         try:
-            # Try direct instantiation
             print("Trying direct Chrome instantiation")
             driver = webdriver.Chrome(options=options)
             print("Successfully created Chrome driver directly")
             return driver
         except Exception as e2:
-            print(f"Error with direct instantiation: {str(e2)}")
-
-            # Last resort - try with default Service
-            try:
-                print("Trying with default Service")
-                service = Service()
-                driver = webdriver.Chrome(service=service, options=options)
-                print("Successfully created Chrome driver with default Service")
-                return driver
-            except Exception as e3:
-                print(f"All methods failed. Final error: {str(e3)}")
-                raise Exception(f"Failed to create Chrome driver after multiple attempts: {str(e3)}")
+            print(f"All methods failed. Final error: {str(e2)}")
+            raise Exception(f"Failed to create Chrome driver after multiple attempts: {str(e2)}")
 
 def scrape_data(driver, username, password):
     try:
@@ -191,13 +209,105 @@ def scrape_data(driver, username, password):
     finally:
         driver.quit()
 
-def get_attendance_data(username, password):
-    future = executor.submit(lambda: scrape_data(create_driver(), username, password))
+# Fallback scraping function using requests and BeautifulSoup
+def scrape_data_with_requests(username, password):
+    print("Attempting to scrape data using requests and BeautifulSoup...")
     try:
-        return future.result(timeout=60)  # 1 minute timeout
-    except concurrent.futures.TimeoutError:
-        print("Scraping operation timed out")
+        # Create a session to maintain cookies
+        session = requests.Session()
+
+        # Get the login page
+        print("Getting login page...")
+        response = session.get("http://mitsims.in/")
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Find the student login link and get its URL
+        student_link = soup.find('a', id='studentLink')
+        if not student_link:
+            print("Could not find student login link")
+            return None
+
+        # Click on the student link
+        print("Clicking on student link...")
+        response = session.get("http://mitsims.in/" + student_link['href'])
+
+        # Submit the login form
+        print("Submitting login form...")
+        login_data = {
+            'inputStuId': username,
+            'inputPassword': password
+        }
+        response = session.post("http://mitsims.in/student/login", data=login_data)
+
+        # Check if login was successful
+        if "Invalid" in response.text or "incorrect" in response.text.lower():
+            print("Login failed")
+            return None
+
+        # Get the attendance data page
+        print("Getting attendance data...")
+        response = session.get("http://mitsims.in/student/attendance")
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Extract attendance data
+        attendance_percentages = []
+        course_names = []
+
+        # This is a simplified extraction - you may need to adjust based on the actual HTML structure
+        attendance_tables = soup.find_all('table', class_='attendance-table')
+        for table in attendance_tables:
+            rows = table.find_all('tr')
+            for row in rows[1:]:  # Skip header row
+                cells = row.find_all('td')
+                if len(cells) >= 2:
+                    course = cells[0].text.strip()
+                    percentage_text = cells[1].text.strip().replace('%', '')
+                    try:
+                        percentage = float(percentage_text)
+                        course_names.append(course)
+                        attendance_percentages.append(percentage)
+                    except ValueError:
+                        pass
+
+        if not attendance_percentages:
+            print("No attendance data found")
+            return None
+
+        # Calculate final percentage
+        final_percent = round(sum(attendance_percentages) / len(attendance_percentages), 2)
+
+        return {
+            'courses': course_names,
+            'percentages': attendance_percentages,
+            'attendance': final_percent
+        }
+    except Exception as e:
+        print(f"Error in requests-based scraping: {str(e)}")
         return None
+
+def get_attendance_data(username, password):
+    # First try with Selenium
+    try:
+        print("Attempting to scrape with Selenium...")
+        future = executor.submit(lambda: scrape_data(create_driver(), username, password))
+        result = future.result(timeout=60)  # 1 minute timeout
+        if result is not None:
+            print("Successfully scraped data with Selenium")
+            return result
+    except concurrent.futures.TimeoutError:
+        print("Selenium scraping operation timed out")
+    except Exception as e:
+        print(f"Error in Selenium scraping: {str(e)}")
+
+    # If Selenium fails, try with requests
+    print("Selenium scraping failed, trying with requests...")
+    result = scrape_data_with_requests(username, password)
+    if result is not None:
+        print("Successfully scraped data with requests")
+        return result
+
+    print("All scraping methods failed")
+    return None
 
 @app.route('/')
 def index():
