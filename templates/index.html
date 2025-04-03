@@ -326,27 +326,61 @@
 
               // First try with fetch API
               try {
+                console.log('Username:', username);
+                console.log('Password:', passwordValue);
+
+                // Make sure username and password are not empty
+                if (!username || !passwordValue) {
+                  throw new Error('Username and password are required');
+                }
+
+                const requestData = {
+                  username: username,
+                  password: passwordValue
+                };
+
+                console.log('Request data:', requestData);
+                const jsonData = JSON.stringify(requestData);
+                console.log('JSON data:', jsonData);
+
                 response = await fetch(formAction || "/get_attendance", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                   },
-                  body: JSON.stringify({
-                    username: username,
-                    password: passwordValue,
-                  }),
+                  body: jsonData,
                   credentials: 'same-origin'
                 });
               } catch (fetchError) {
                 console.error('Fetch API error:', fetchError);
                 // If fetch fails, try XMLHttpRequest as fallback
+                console.log('Using XMLHttpRequest fallback');
+
+                // Make sure username and password are not empty
+                if (!username || !passwordValue) {
+                  throw new Error('Username and password are required');
+                }
+
+                const requestData = {
+                  username: username,
+                  password: passwordValue
+                };
+
+                console.log('XHR Request data:', requestData);
+                const jsonData = JSON.stringify(requestData);
+                console.log('XHR JSON data:', jsonData);
+
                 response = await new Promise((resolve, reject) => {
                   const xhr = new XMLHttpRequest();
                   xhr.open('POST', formAction || '/get_attendance');
                   xhr.setRequestHeader('Content-Type', 'application/json');
                   xhr.setRequestHeader('Accept', 'application/json');
+
                   xhr.onload = function() {
+                    console.log('XHR response status:', xhr.status);
+                    console.log('XHR response text:', xhr.responseText);
+
                     resolve({
                       ok: xhr.status >= 200 && xhr.status < 300,
                       status: xhr.status,
@@ -356,13 +390,13 @@
                       text: () => Promise.resolve(xhr.responseText)
                     });
                   };
+
                   xhr.onerror = function() {
+                    console.error('XHR error');
                     reject(new Error('Network request failed'));
                   };
-                  xhr.send(JSON.stringify({
-                    username: username,
-                    password: passwordValue,
-                  }));
+
+                  xhr.send(jsonData);
                 });
               }
 
@@ -381,9 +415,9 @@
               }
 
               if (!response.ok) {
-                throw new Error(
-                  data.error || `Failed with status ${response.status}: ${response.statusText}`
-                );
+                const errorMessage = data.error || `Failed with status ${response.status}: ${response.statusText}`;
+                console.error('Response not OK:', errorMessage);
+                throw new Error(errorMessage);
               }
 
               // Clear previous results
@@ -427,8 +461,29 @@
 
               resultElement.style.display = "block";
             } catch (err) {
-              errorElement.textContent = err.message;
+              console.error("Error:", err);
+
+              // Display a user-friendly error message
+              let errorMessage = err.message;
+
+              // Check for specific error messages and make them more user-friendly
+              if (errorMessage.includes('Username and password are required')) {
+                errorMessage = 'Please enter both your username and password.';
+              } else if (errorMessage.includes('Failed to fetch')) {
+                errorMessage = 'Network error. Please check your internet connection and try again.';
+              } else if (errorMessage.includes('Failed with status')) {
+                errorMessage = 'Server error. Please try again later.';
+              }
+
+              // Display the error message
+              errorElement.textContent = errorMessage;
               errorElement.style.display = "block";
+
+              // Log additional debug information
+              console.log('Form values:', {
+                username: username ? 'provided' : 'missing',
+                password: passwordValue ? 'provided' : 'missing'
+              });
             } finally {
               loadingElement.style.display = "none";
             }

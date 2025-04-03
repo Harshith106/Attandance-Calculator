@@ -429,22 +429,72 @@ def attendance():
 
     # Handle POST request
     try:
-        data = request.get_json()
-        print(f"Request data type: {type(data)}")
+        # Print request information for debugging
+        print(f"Request headers: {dict(request.headers)}")
+        print(f"Request content type: {request.content_type}")
+        print(f"Request method: {request.method}")
 
-        if not data:
-            # Try to get form data if JSON parsing fails
-            username = request.form.get('username')
-            password = request.form.get('password')
-            print("Falling back to form data")
-        else:
-            username = data.get('username')
-            password = data.get('password')
+        # Try multiple methods to get the username and password
+        username = None
+        password = None
 
-        print(f"Username provided: {bool(username)}, Password provided: {bool(password)}")
+        # Method 1: Try to get JSON data
+        try:
+            data = request.get_json(silent=True)
+            print(f"JSON data: {data}")
+            if data:
+                username = data.get('username')
+                password = data.get('password')
+                print("Got credentials from JSON data")
+        except Exception as e:
+            print(f"Error parsing JSON: {str(e)}")
 
+        # Method 2: Try to get form data
         if not username or not password:
-            return jsonify({'error': 'Username and password are required'}), 400
+            form_username = request.form.get('username')
+            form_password = request.form.get('password')
+            if form_username and form_password:
+                username = form_username
+                password = form_password
+                print("Got credentials from form data")
+
+        # Method 3: Try to get data from request body directly
+        if not username or not password:
+            try:
+                body = request.get_data(as_text=True)
+                print(f"Request body: {body}")
+                if body:
+                    import json
+                    try:
+                        body_data = json.loads(body)
+                        if isinstance(body_data, dict):
+                            username = body_data.get('username')
+                            password = body_data.get('password')
+                            print("Got credentials from request body")
+                    except json.JSONDecodeError:
+                        # Not JSON, might be form data
+                        if '=' in body and '&' in body:
+                            # Simple form data parsing
+                            params = dict(item.split('=') for item in body.split('&'))
+                            username = params.get('username')
+                            password = params.get('password')
+                            print("Got credentials from parsed form data in body")
+            except Exception as e:
+                print(f"Error processing request body: {str(e)}")
+
+        print(f"Final username provided: {bool(username)}, password provided: {bool(password)}")
+
+        # If still no username or password, check if they're in the URL parameters
+        if not username or not password:
+            username = request.args.get('username')
+            password = request.args.get('password')
+            print(f"Got credentials from URL parameters: {bool(username)} and {bool(password)}")
+
+        # If we still don't have valid credentials, return an error
+        if not username or not password:
+            error_msg = 'Username and password are required'
+            print(f"Error: {error_msg}")
+            return jsonify({'error': error_msg}), 400
 
         result = get_attendance_data(username, password)
         if result is not None:
