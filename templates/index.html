@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Attendance Calculator</title>
+    <style>
+      :root {
+        --bg-dark: #121212;
+        --card-bg: #1e1e1e;
+        --text-color: #e0e0e0;
+        --primary: #bb86fc;
+        --secondary: #03dac6;
+        --error: #cf6679;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        color: var(--text-color);
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+      }
+
+      .container {
+        background: linear-gradient(145deg, #252525 0%, #1e1e1e 100%);
+        border-radius: 10px;
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+        padding: 2rem;
+        width: 100%;
+        max-width: 600px;
+        margin: 20px 0;
+      }
+
+      h1 {
+        background: linear-gradient(90deg, #bb86fc 0%, #03dac6 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        text-align: center;
+        margin-bottom: 1.5rem;
+        font-size: clamp(1.5rem, 4vw, 2rem);
+      }
+
+      .form-group {
+        margin-bottom: 1.5rem;
+        position: relative;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: var(--secondary);
+        font-size: clamp(0.9rem, 3vw, 1rem);
+      }
+
+      input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #333;
+        border-radius: 5px;
+        background-color: #2d2d2d;
+        color: var(--text-color);
+        font-size: clamp(0.9rem, 3vw, 1rem);
+        box-sizing: border-box;
+      }
+
+      .password-container {
+        position: relative;
+      }
+
+      .toggle-password {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: var(--secondary);
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 0 5px;
+      }
+
+      button[type="submit"] {
+        width: 100%;
+        padding: 0.75rem;
+        border: none;
+        border-radius: 5px;
+        background: linear-gradient(90deg, #bb86fc 0%, #03dac6 100%);
+        color: #121212;
+        font-size: clamp(1rem, 3vw, 1.1rem);
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+
+      button[type="submit"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(187, 134, 252, 0.3);
+      }
+
+      .result {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        border-radius: 5px;
+        background: rgba(30, 30, 30, 0.8);
+        display: none;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+        font-size: clamp(0.8rem, 3vw, 1rem);
+      }
+
+      th,
+      td {
+        padding: 12px 8px;
+        text-align: left;
+        border-bottom: 1px solid #333;
+      }
+
+      th {
+        background: linear-gradient(
+          90deg,
+          rgba(187, 134, 252, 0.2) 0%,
+          rgba(3, 218, 198, 0.2) 100%
+        );
+        color: var(--secondary);
+      }
+
+      tr:hover {
+        background-color: rgba(255, 255, 255, 0.05);
+      }
+
+      .final-percent {
+        margin-top: 1rem;
+        padding: 1rem;
+        border-radius: 5px;
+        background: linear-gradient(
+          90deg,
+          rgba(187, 134, 252, 0.1) 0%,
+          rgba(3, 218, 198, 0.1) 100%
+        );
+        text-align: center;
+        font-size: clamp(1rem, 3vw, 1.2rem);
+      }
+
+      .without-technical {
+        margin-top: 0.5rem;
+        padding: 1rem;
+        border-radius: 5px;
+        background: linear-gradient(
+          90deg,
+          rgba(255, 165, 0, 0.1) 0%,
+          rgba(255, 69, 0, 0.1) 100%
+        );
+        text-align: center;
+        font-size: clamp(1rem, 3vw, 1.2rem);
+      }
+
+      .error {
+        color: var(--error);
+        margin-top: 1rem;
+        display: none;
+        font-size: clamp(0.9rem, 3vw, 1rem);
+      }
+
+      .loading {
+        text-align: center;
+        margin: 1rem 0;
+        display: none;
+        font-size: clamp(0.9rem, 3vw, 1rem);
+      }
+
+      .blink {
+        animation: blink 1.5s infinite;
+      }
+
+      @keyframes blink {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          padding: 1.5rem;
+        }
+
+        th,
+        td {
+          padding: 8px 6px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .container {
+          padding: 1rem;
+        }
+
+        .form-group {
+          margin-bottom: 1rem;
+        }
+
+        input {
+          padding: 0.6rem;
+        }
+
+        button[type="submit"] {
+          padding: 0.7rem;
+        }
+
+        th,
+        td {
+          padding: 6px 4px;
+          font-size: 0.8rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Attendance Calculator</h1>
+      <form id="attendanceForm" action="/get_attendance" method="post">
+        <div class="form-group">
+          <label for="username">Username/Rollnumber</label>
+          <input type="text" id="username" name="username" required />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="password-container">
+            <input type="password" id="password" name="password" required />
+            <button type="button" class="toggle-password" id="togglePassword">
+              Show
+            </button>
+          </div>
+        </div>
+        <button type="submit">Calculate Attendance</button>
+        <input type="hidden" name="_method" value="post" />
+      </form>
+
+      <div class="loading" id="loading">
+        <p class="blink">
+          Please wait while we are calculating your attendance...
+        </p>
+      </div>
+
+      <div class="error" id="error"></div>
+
+      <div class="result" id="result">
+        <h2>Attendance Summary</h2>
+        <div style="overflow-x: auto">
+          <table id="attendanceTable">
+            <thead>
+              <tr>
+                <th>Course</th>
+                <th>Attendance Percentage</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+        <div class="final-percent">
+          <strong>Overall Attendance Percentage </strong>
+          <span id="finalPercentage">0</span>%
+        </div>
+        <div class="without-technical" id="withoutTechnical">
+          <strong>Overall Attandance Without Technical Training </strong>
+          <span id="withoutTechnicalPercentage">0</span>%
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const togglePassword = document.getElementById("togglePassword");
+        const passwordInput = document.getElementById("password");
+
+        togglePassword.addEventListener("click", function () {
+          const type =
+            passwordInput.getAttribute("type") === "password"
+              ? "text"
+              : "password";
+          passwordInput.setAttribute("type", type);
+          this.textContent = type === "password" ? "Show" : "Hide";
+        });
+
+        // Form submission
+        document
+          .getElementById("attendanceForm")
+          .addEventListener("submit", async (e) => {
+            e.preventDefault(); // Prevent default form submission
+
+            const form = e.target;
+            const formAction = form.getAttribute('action');
+            const username = document.getElementById("username").value;
+            const passwordValue = document.getElementById("password").value; // Avoid conflict
+            const errorElement = document.getElementById("error");
+            const resultElement = document.getElementById("result");
+            const loadingElement = document.getElementById("loading");
+            const tableBody = document.getElementById("tableBody");
+
+            console.log('Form action:', formAction);
+
+            // Reset display
+            errorElement.style.display = "none";
+            resultElement.style.display = "none";
+            loadingElement.style.display = "block";
+
+            try {
+              console.log('Sending request to server...');
+              let response;
+
+              // First try with fetch API
+              try {
+                response = await fetch(formAction || "/get_attendance", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                  },
+                  body: JSON.stringify({
+                    username: username,
+                    password: passwordValue,
+                  }),
+                  credentials: 'same-origin'
+                });
+              } catch (fetchError) {
+                console.error('Fetch API error:', fetchError);
+                // If fetch fails, try XMLHttpRequest as fallback
+                response = await new Promise((resolve, reject) => {
+                  const xhr = new XMLHttpRequest();
+                  xhr.open('POST', formAction || '/get_attendance');
+                  xhr.setRequestHeader('Content-Type', 'application/json');
+                  xhr.setRequestHeader('Accept', 'application/json');
+                  xhr.onload = function() {
+                    resolve({
+                      ok: xhr.status >= 200 && xhr.status < 300,
+                      status: xhr.status,
+                      statusText: xhr.statusText,
+                      headers: new Headers(),
+                      json: () => JSON.parse(xhr.responseText),
+                      text: () => Promise.resolve(xhr.responseText)
+                    });
+                  };
+                  xhr.onerror = function() {
+                    reject(new Error('Network request failed'));
+                  };
+                  xhr.send(JSON.stringify({
+                    username: username,
+                    password: passwordValue,
+                  }));
+                });
+              }
+
+              console.log('Response status:', response.status);
+              console.log('Response headers:', response.headers);
+
+              let data;
+              const contentType = response.headers.get('content-type');
+              if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+                console.log('Response data:', data);
+              } else {
+                const text = await response.text();
+                console.log('Response text:', text);
+                throw new Error(`Server returned non-JSON response: ${text}`);
+              }
+
+              if (!response.ok) {
+                throw new Error(
+                  data.error || `Failed with status ${response.status}: ${response.statusText}`
+                );
+              }
+
+              // Clear previous results
+              tableBody.innerHTML = "";
+
+              if (data.courses && data.percentages) {
+                for (let i = 0; i < data.courses.length; i++) {
+                  const row = document.createElement("tr");
+
+                  const courseCell = document.createElement("td");
+                  courseCell.textContent = data.courses[i];
+                  row.appendChild(courseCell);
+
+                  const percentCell = document.createElement("td");
+                  percentCell.textContent = data.percentages[i] + "%";
+                  row.appendChild(percentCell);
+
+                  tableBody.appendChild(row);
+                }
+              }
+
+              // Display overall percentage
+              document.getElementById("finalPercentage").textContent =
+                data.attendance + "%";
+
+              // Calculate and display without technical training (remove last element)
+              if (data.percentages && data.percentages.length > 1) {
+                const withoutTechnical = [...data.percentages];
+                withoutTechnical.pop(); // Remove last element (technical training)
+                const avgWithoutTechnical =
+                  withoutTechnical.reduce((a, b) => a + b, 0) /
+                  withoutTechnical.length;
+                document.getElementById(
+                  "withoutTechnicalPercentage"
+                ).textContent = avgWithoutTechnical.toFixed(2) + "%";
+              } else {
+                document.getElementById(
+                  "withoutTechnicalPercentage"
+                ).textContent = "N/A";
+              }
+
+              resultElement.style.display = "block";
+            } catch (err) {
+              errorElement.textContent = err.message;
+              errorElement.style.display = "block";
+            } finally {
+              loadingElement.style.display = "none";
+            }
+          });
+      });
+    </script>
+    <!-- Add this just before the closing </body> tag -->
+    <footer
+      style="
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: linear-gradient(
+          90deg,
+          rgba(27, 27, 36, 0.9) 0%,
+          rgba(30, 30, 40, 0.9) 100%
+        );
+        backdrop-filter: blur(5px);
+        padding: 15px 0;
+        border-top: 1px solid rgba(187, 134, 252, 0.1);
+        z-index: 100;
+      "
+    >
+      <div
+        style="
+          max-width: 1200px;
+          margin: 0 auto;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0 20px;
+          flex-wrap: wrap;
+        "
+      >
+        <div style="color: rgba(255, 255, 255, 0.7); font-size: 14px">
+          © 2023 Attendance Calculator. All rights reserved.
+        </div>
+        <div style="display: flex; gap: 15px">
+          <a
+            href="https://www.linkedin.com/in/p-harshith-09b357354/"
+            target="_blank"
+            style="
+              color: #bb86fc;
+              text-decoration: none;
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              transition: all 0.3s;
+            "
+            onmouseover="this.style.color='#03dac6'"
+            onmouseout="this.style.color='#bb86fc'"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path
+                d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"
+              />
+            </svg>
+            LinkedIn
+          </a>
+          <a
+            href="https://github.com/Harshith106"
+            style="
+              color: #bb86fc;
+              text-decoration: none;
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              transition: all 0.3s;
+            "
+            onmouseover="this.style.color='#03dac6'"
+            onmouseout="this.style.color='#bb86fc'"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path
+                d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+              />
+            </svg>
+            GitHub
+          </a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

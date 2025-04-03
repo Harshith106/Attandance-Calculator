@@ -1,0 +1,18 @@
+# Core dependencies
+flask==2.3.2
+selenium==4.10.0
+webdriver-manager==3.8.6
+flask-limiter==2.8.1
+flask-cors==4.0.0
+gunicorn==20.1.0
+
+# Required by flask-limiter
+rich<13,>=12
+limits>=2.8
+
+# Required by selenium
+requests>=2.31.0
+urllib3>=1.26.0
+
+# Logging
+concurrent-log-handler==0.9.20
