@@ -212,21 +212,182 @@ def scrape_data(driver, username, password):
 # Fallback scraping function using requests and BeautifulSoup
 def scrape_data_with_requests(username, password):
     print("Attempting to scrape data using requests and BeautifulSoup...")
+    try:
+        # Create a session to maintain cookies
+        session = requests.Session()
 
-    # Create mock data for testing
-    print("Creating mock attendance data for testing")
-    mock_courses = ["Computer Networks", "Database Management Systems", "Operating Systems", "Software Engineering", "Web Development"]
-    mock_percentages = [85.5, 90.2, 78.3, 92.1, 88.7]
-    mock_final_percent = round(sum(mock_percentages) / len(mock_percentages), 2)
+        # Set headers to mimic a browser
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        session.headers.update(headers)
 
-    print(f"Mock data created with {len(mock_courses)} courses and average attendance of {mock_final_percent}%")
+        # Get the login page
+        print("Getting login page...")
+        response = session.get("http://mitsims.in/")
+        print(f"Login page status code: {response.status_code}")
 
-    return {
-        'courses': mock_courses,
-        'percentages': mock_percentages,
-        'attendance': mock_final_percent,
-        'note': 'This is mock data for testing. The actual scraping functionality is being fixed.'
-    }
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Find the student login link
+        student_link = soup.find('a', id='studentLink')
+        if not student_link:
+            print("Could not find student login link, trying alternative method")
+            # Try a direct approach
+            login_url = "http://mitsims.in/student/login"
+        else:
+            print(f"Found student link: {student_link['href']}")
+            # Click on the student link
+            login_url = "http://mitsims.in" + student_link['href']
+
+        # Get the login form page
+        print(f"Getting login form at {login_url}...")
+        response = session.get(login_url)
+        print(f"Login form status code: {response.status_code}")
+
+        # Extract any hidden fields or CSRF tokens if needed
+        soup = BeautifulSoup(response.text, 'html.parser')
+        form = soup.find('form', id='studentForm')
+
+        # Prepare login data
+        login_data = {
+            'inputStuId': username,
+            'inputPassword': password
+        }
+
+        # Add any hidden fields from the form
+        if form:
+            for hidden_field in form.find_all('input', type='hidden'):
+                if hidden_field.get('name'):
+                    login_data[hidden_field['name']] = hidden_field.get('value', '')
+
+        # Submit the login form
+        print("Submitting login form...")
+        print(f"Login data: {login_data}")
+
+        # Get the form action URL
+        form_action = form['action'] if form and form.get('action') else '/student/login'
+        if not form_action.startswith('http'):
+            form_action = "http://mitsims.in" + form_action
+
+        print(f"Form action URL: {form_action}")
+        response = session.post(form_action, data=login_data)
+        print(f"Login response status code: {response.status_code}")
+
+        # Check if login was successful
+        if "Invalid" in response.text or "incorrect" in response.text.lower():
+            print("Login failed - invalid credentials")
+            return None
+
+        # Get the attendance data page - try different possible URLs
+        attendance_urls = [
+            "http://mitsims.in/student/attendance",
+            "http://mitsims.in/student/dashboard",
+            "http://mitsims.in/student/home"
+        ]
+
+        attendance_data_found = False
+        for url in attendance_urls:
+            print(f"Trying to get attendance data from {url}...")
+            response = session.get(url)
+            print(f"Attendance page status code: {response.status_code}")
+
+            # Try to extract attendance data
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Look for attendance data in different formats
+            attendance_percentages = []
+            course_names = []
+
+            # Method 1: Look for tables
+            tables = soup.find_all('table')
+            for table in tables:
+                print(f"Found table: {table.get('class', 'no-class')}")
+                rows = table.find_all('tr')
+                for row in rows[1:]:  # Skip header row
+                    cells = row.find_all('td')
+                    if len(cells) >= 2:
+                        course = cells[0].text.strip()
+                        percentage_text = cells[1].text.strip().replace('%', '')
+                        try:
+                            percentage = float(percentage_text)
+                            course_names.append(course)
+                            attendance_percentages.append(percentage)
+                            print(f"Found course: {course}, percentage: {percentage}")
+                        except ValueError:
+                            pass
+
+            # Method 2: Look for specific divs or spans with attendance data
+            attendance_elements = soup.find_all(['div', 'span'], class_=lambda c: c and ('attendance' in c.lower() or 'percent' in c.lower()))
+            for element in attendance_elements:
+                print(f"Found attendance element: {element.text}")
+                # Process these elements if needed
+
+            # Method 3: Look for fieldsets (as in the Selenium version)
+            fieldsets = soup.find_all('fieldset')
+            for fieldset in fieldsets:
+                print(f"Found fieldset: {fieldset.get('class', 'no-class')}")
+                # Try to extract course name and percentage
+                course_divs = fieldset.find_all('div', class_=lambda c: c and 'x-field' in c)
+                if len(course_divs) >= 5:
+                    try:
+                        course = course_divs[1].find('span').text.strip()
+                        percentage_text = course_divs[4].find('span').text.strip()
+                        percentage = float(percentage_text)
+                        course_names.append(course)
+                        attendance_percentages.append(percentage)
+                        print(f"Found course from fieldset: {course}, percentage: {percentage}")
+                    except (AttributeError, ValueError, IndexError) as e:
+                        print(f"Error extracting from fieldset: {str(e)}")
+
+            if attendance_percentages:
+                attendance_data_found = True
+                break
+
+        if not attendance_data_found:
+            print("No attendance data found in any of the tried URLs, falling back to mock data")
+            # Fall back to mock data if we couldn't find real data
+            mock_courses = ["Computer Networks", "Database Management Systems", "Operating Systems", "Software Engineering", "Web Development"]
+            mock_percentages = [85.5, 90.2, 78.3, 92.1, 88.7]
+            mock_final_percent = round(sum(mock_percentages) / len(mock_percentages), 2)
+
+            return {
+                'courses': mock_courses,
+                'percentages': mock_percentages,
+                'attendance': mock_final_percent,
+                'note': 'This is mock data. The system could not extract your actual attendance data.'
+            }
+
+        # Calculate final percentage
+        final_percent = round(sum(attendance_percentages) / len(attendance_percentages), 2)
+        print(f"Final percentage: {final_percent}%")
+
+        return {
+            'courses': course_names,
+            'percentages': attendance_percentages,
+            'attendance': final_percent
+        }
+    except Exception as e:
+        print(f"Error in requests-based scraping: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+        # Fall back to mock data if there's an error
+        print("Returning mock data due to error")
+        mock_courses = ["Computer Networks", "Database Management Systems", "Operating Systems", "Software Engineering", "Web Development"]
+        mock_percentages = [85.5, 90.2, 78.3, 92.1, 88.7]
+        mock_final_percent = round(sum(mock_percentages) / len(mock_percentages), 2)
+
+        return {
+            'courses': mock_courses,
+            'percentages': mock_percentages,
+            'attendance': mock_final_percent,
+            'note': 'This is mock data due to an error. The system could not extract your actual attendance data.'
+        }
 
 def get_attendance_data(username, password):
     # First try with Selenium
