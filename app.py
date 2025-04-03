@@ -12,6 +12,7 @@ from flask_cors import CORS
 import concurrent.futures
 import atexit
 import os
+import subprocess
 
 app = Flask(__name__)
 
@@ -31,6 +32,37 @@ def cleanup():
 atexit.register(cleanup)
 
 def create_driver():
+    print("Starting Chrome driver creation...")
+
+    # Find Chrome binary
+    chrome_binary = None
+    possible_paths = [
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/google-chrome",
+        "/usr/local/bin/google-chrome",
+        "/opt/google/chrome/google-chrome"
+    ]
+
+    # Check if Chrome exists in any of the possible paths
+    for path in possible_paths:
+        if os.path.exists(path):
+            chrome_binary = path
+            print(f"Found Chrome binary at: {chrome_binary}")
+            break
+
+    if not chrome_binary:
+        print("Chrome binary not found in standard locations. Trying to find it...")
+        try:
+            # Try to find Chrome using 'which' command
+            import subprocess
+            result = subprocess.run(['which', 'google-chrome-stable'], capture_output=True, text=True)
+            if result.stdout.strip():
+                chrome_binary = result.stdout.strip()
+                print(f"Found Chrome using 'which' command at: {chrome_binary}")
+        except Exception as e:
+            print(f"Error finding Chrome with 'which' command: {str(e)}")
+
+    # Set up Chrome options
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--disable-gpu")
@@ -40,46 +72,63 @@ def create_driver():
     options.add_argument("--log-level=3")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
-    # Check if we're running on Render (environment variable check)
-    is_render = os.environ.get('RENDER') == 'true'
+    # If Chrome binary was found, set it explicitly
+    if chrome_binary:
+        print(f"Setting Chrome binary location to: {chrome_binary}")
+        options.binary_location = chrome_binary
 
-    if is_render:
-        print("Running on Render, using installed ChromeDriver")
-        # On Render, use the ChromeDriver installed by build.sh
-        chrome_path = "/usr/bin/google-chrome-stable"
-        chromedriver_path = "/usr/local/bin/chromedriver"
+    # Find ChromeDriver
+    chromedriver_path = None
+    possible_driver_paths = [
+        "/usr/local/bin/chromedriver",
+        "/usr/bin/chromedriver"
+    ]
 
-        options.binary_location = chrome_path
-        service = Service(executable_path=chromedriver_path)
-
-        try:
-            driver = webdriver.Chrome(service=service, options=options)
-            print("Successfully created Chrome driver with explicit paths")
-            return driver
-        except Exception as e:
-            print(f"Error creating Chrome driver with explicit paths: {str(e)}")
-            # Fall through to other methods
+    for path in possible_driver_paths:
+        if os.path.exists(path):
+            chromedriver_path = path
+            print(f"Found ChromeDriver at: {chromedriver_path}")
+            break
 
     # Try different methods to create the driver
     try:
-        # First try with ChromeDriverManager
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-        print("Successfully created Chrome driver with ChromeDriverManager")
+        if chromedriver_path:
+            # Use the found ChromeDriver
+            print(f"Creating Chrome driver with explicit ChromeDriver path: {chromedriver_path}")
+            service = Service(executable_path=chromedriver_path)
+            driver = webdriver.Chrome(service=service, options=options)
+            print("Successfully created Chrome driver with explicit ChromeDriver path")
+        else:
+            # Try with ChromeDriverManager
+            print("Creating Chrome driver with ChromeDriverManager")
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=options)
+            print("Successfully created Chrome driver with ChromeDriverManager")
+
+        return driver
     except Exception as e:
-        print(f"Error using ChromeDriverManager: {str(e)}")
+        print(f"Error creating Chrome driver with primary method: {str(e)}")
+
+        # Fallback methods
         try:
-            # Fallback to direct Chrome instantiation
+            # Try direct instantiation
+            print("Trying direct Chrome instantiation")
             driver = webdriver.Chrome(options=options)
             print("Successfully created Chrome driver directly")
+            return driver
         except Exception as e2:
-            print(f"Error creating Chrome driver directly: {str(e2)}")
-            # Last resort - try with a specific Chrome path
-            options.binary_location = "/usr/bin/google-chrome-stable"  # Common location on Linux servers
-            driver = webdriver.Chrome(options=options)
-            print("Successfully created Chrome driver with binary location")
+            print(f"Error with direct instantiation: {str(e2)}")
 
-    return driver
+            # Last resort - try with default Service
+            try:
+                print("Trying with default Service")
+                service = Service()
+                driver = webdriver.Chrome(service=service, options=options)
+                print("Successfully created Chrome driver with default Service")
+                return driver
+            except Exception as e3:
+                print(f"All methods failed. Final error: {str(e3)}")
+                raise Exception(f"Failed to create Chrome driver after multiple attempts: {str(e3)}")
 
 def scrape_data(driver, username, password):
     try:
